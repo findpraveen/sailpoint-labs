@@ -1,0 +1,13 @@
+SELECT u.*
+FROM users u
+JOIN (
+    SELECT application_id,
+           COUNT(*) AS total_accounts,
+           SUM(CASE WHEN STR_TO_DATE(lastLoginDate, '%d/%m/%Y') < DATE_SUB(CURDATE(), INTERVAL 88 DAY) THEN 1 ELSE 0 END) AS before_88_days_count
+    FROM application_accounts
+    GROUP BY application_id
+) aa ON u.application_id = aa.application_id
+WHERE 
+    (total_accounts < 50 AND before_88_days_count > 5)
+    OR 
+    (total_accounts >= 50 AND before_88_days_count > 10);

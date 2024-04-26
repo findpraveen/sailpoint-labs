@@ -1,7 +1,7 @@
 SELECT app.id
 FROM spt_application app
 JOIN (
-    SELECT application, ExtractValue(attributes, '/Attributes/Map/entry[@key="last_login"]/@value') as lastLogin,
+    SELECT application,
            COUNT(*) AS total_accounts,
            SUM(CASE WHEN STR_TO_DATE(ExtractValue(attributes, '/Attributes/Map/entry[@key="last_login"]/@value'), '%d/%m/%Y') < DATE_SUB(CURDATE(), INTERVAL 88 DAY) THEN 1 ELSE 0 END) AS before_88_days_count
     FROM spt_link

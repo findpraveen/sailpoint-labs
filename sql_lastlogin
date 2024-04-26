@@ -1,12 +1,12 @@
-SELECT u.*
-FROM users u
+SELECT app.id
+FROM spt_application app
 JOIN (
-    SELECT application_id,
+    SELECT application, ExtractValue(attributes, '/Attributes/Map/entry[@key="last_login"]/@value') as lastLogin,
            COUNT(*) AS total_accounts,
-           SUM(CASE WHEN STR_TO_DATE(lastLoginDate, '%d/%m/%Y') < DATE_SUB(CURDATE(), INTERVAL 88 DAY) THEN 1 ELSE 0 END) AS before_88_days_count
-    FROM application_accounts
-    GROUP BY application_id
-) aa ON u.application_id = aa.application_id
+           SUM(CASE WHEN STR_TO_DATE(ExtractValue(attributes, '/Attributes/Map/entry[@key="last_login"]/@value') as lastLogin, '%d/%m/%Y') < DATE_SUB(CURDATE(), INTERVAL 88 DAY) THEN 1 ELSE 0 END) AS before_88_days_count
+    FROM spt_link
+    GROUP BY application
+) aa ON app.id = aa.application
 WHERE 
     (total_accounts < 50 AND before_88_days_count > 5)
     OR 

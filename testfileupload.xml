@@ -1,0 +1,116 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Rule created="1726389321063" id="ac1f319e91f412118191f4d27d6701af" language="beanshell" modified="1727284160450" name="LCM Validate Password" significantModified="1727284160450">
+  <Source>
+
+  import com.amazonaws.services.s3.AmazonS3;
+  import  com.amazonaws.services.s3.model.*;
+  import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+  import com.amazonaws.services.simplesystemsmanagement.AWSSimpleSystemsManagement;
+  import com.amazonaws.services.simplesystemsmanagement.AWSSimpleSystemsManagementClientBuilder;
+  import com.amazonaws.services.simplesystemsmanagement.model.*;
+
+  import java.util.*;
+  import java.io.*;
+
+  public static String getLatestFile(String instanceId) throws InterruptedException {
+    AWSSimpleSystemsManagement ssmClient = AWSSimpleSystemsManagementClientBuilder.defaultClient();
+
+    String command = "ls -t /home/ubuntu/upload-files | head -n 5";
+    SendCommandRequest sendCommandRequest = new SendCommandRequest().withDocumentName("AWS-RunShellScript")
+      .withTargets(Collections.singletonList(new Target()
+                                             .withKey("instanceids")
+                                             .withValues(Collections.singletonList(instanceId))))
+      .withParameters(Collections.singletonMap("commands", Collections.singletonList(command)));
+
+    SendCommandResult commandResponse = ssmClient.sendCommand(sendCommandRequest);
+    String commandId = commandResponse.getCommand().getCommandId();
+
+    // Wait for command to complete and fetch output
+    return getCommandOutput(ssmClient, commandId);
+  }
+
+  private static String getCommandOutput(AWSSimpleSystemsManagement ssmClient, String commandId) throws InterruptedException {
+    boolean commandFinished = false;
+    String output = "";
+
+    while (!commandFinished) {
+      ListCommandInvocationsRequest invocationRequest = new ListCommandInvocationsRequest()
+        .withCommandId(commandId)
+        .withDetails(true);
+
+      List&lt;CommandInvocation> commandInvocations = ssmClient.listCommandInvocations(invocationRequest).getCommandInvocations();
+
+      for (CommandInvocation invocation : commandInvocations) {
+        if ("Success".equals(invocation.getStatus())) {
+          commandFinished = true;
+          output = invocation.getCommandPlugins().get(0).getOutput(); // Get command output
+          break;
+        }
+      }
+
+      Thread.sleep(5000); // Poll every 5 seconds
+    }
+    return output.trim(); // Latest filename
+  }
+
+
+  public static String uploadFileToS3(String instanceId, String fileName, String s3Bucket, String s3Key) throws InterruptedException {
+    AWSSimpleSystemsManagement ssmClient = AWSSimpleSystemsManagementClientBuilder.defaultClient();
+
+    String command = String.format("aws s3 cp /home/ubuntu/upload-files/%s s3://%s/%s", fileName, s3Bucket, s3Key);
+    SendCommandRequest sendCommandRequest = new SendCommandRequest()
+      .withDocumentName("AWS-RunShellScript")
+      .withTargets(Collections.singletonList(new Target()
+                                             .withKey("instanceids")
+                                             .withValues(Collections.singletonList(instanceId))))
+      .withParameters(Collections.singletonMap("commands", Collections.singletonList(command)));
+
+    SendCommandResult commandResponse = ssmClient.sendCommand(sendCommandRequest);
+    String commandId = commandResponse.getCommand().getCommandId();
+    return getCommandOutput(ssmClient, commandId);
+  }
+
+  public static void downloadFromS3(String bucketName, String objectKey, String downloadFilePath) {
+    // Create S3 client
+    AmazonS3 s3Client = AmazonS3ClientBuilder.defaultClient();
+
+    // Specify the local file to download to
+    File downloadFile = new File(downloadFilePath);
+
+    // Create a GetObjectRequest
+    GetObjectRequest getObjectRequest = new GetObjectRequest(bucketName, objectKey);
+
+    // Download the file directly to the specified File
+    try {
+      s3Client.getObject(getObjectRequest, downloadFile);
+      System.out.println("File downloaded successfully to " + downloadFilePath);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  String instanceId="i-0e297628c53074eea";
+  String s3Bucket = "test-transfer-file";
+  String s3Key = "testfiledata.csv";
+  String downloadPath = "/opt/tomcat/apache-tomcat-9.0.89/logs/";
+  // Step 1: Get the latest file from the source server
+
+  try{
+    String latestFileName = getLatestFile(instanceId);
+System.out.print("Latest Files " + latestFileName);
+    // Step 2: Upload the latest file to S3
+  // String result = uploadFileToS3(instanceId, latestFileName, s3Bucket, s3Key);
+         //        System.out.println("File Uploaded successfully to " + result);
+
+    // Optional: Step 3: Download the file from S3 (if needed)
+   // downloadFromS3(s3Bucket, s3Key, downloadPath+s3Key);
+
+  } catch (InterruptedException e) {
+    e.printStackTrace();
+  }
+
+
+
+  </Source>
+</Rule>
